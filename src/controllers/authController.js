@@ -9,15 +9,17 @@ const signup = async (req, res) => {
     const { nome, email, senha } = req.body;
 
     try {
+        if (!senha) return res.status(400).json({ error: 'A senha é obrigatória.' });
+
         const salt = await bcrypt.genSalt(10);
         const senhaHash = await bcrypt.hash(senha, salt);
 
+        // Inserimos e pedimos de volta as informações básicas
         const result = await pool.query(
             'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id, nome, email, role',
             [nome, email, senhaHash]
         );
 
-        // Pegando o primeiro (e único) usuário criado da lista
         const newUser = result.rows;
 
         res.status(201).json({
@@ -42,26 +44,35 @@ const login = async (req, res) => {
     const { email, senha } = req.body;
 
     try {
+        if (!email || !senha) return res.status(400).json({ error: 'Preencha todos os campos.' });
+
+        // Buscamos o usuário
         const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
 
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
         }
 
-        // Pegando o usuário na posição 0 da lista
         const user = result.rows;
 
-        const isMatch = await bcrypt.compare(senha, user.senha);
+        // PROTEÇÃO EXTRA: Se a coluna da senha vier vazia ou se chamar 'password'
+        const hashDoBanco = user.senha || user.password;
+
+        if (!hashDoBanco) {
+            console.error('ERRO GRAVE: A senha não veio do banco de dados para o usuário:', email);
+            return res.status(500).json({ error: 'Erro interno de configuração de dados.' });
+        }
+
+        // Agora sim, comparamos!
+        const isMatch = await bcrypt.compare(senha, hashDoBanco);
 
         if (!isMatch) {
             return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
         }
 
+        // Se chegou aqui, o login foi um sucesso!
         const token = jwt.sign(
-            { 
-                id: user.id, 
-                role: user.role 
-            }, 
+            { id: user.id, role: user.role }, 
             process.env.JWT_SECRET,
             { expiresIn: '1d' }
         );
