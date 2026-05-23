@@ -1,6 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const pool = require('../config/db');
+const pool = require('../config/db'); // Verifica se o caminho está correto para o teu projeto
 
 // ==========================================
 // ROTA DE CADASTRO (SIGNUP)
@@ -14,17 +14,14 @@ const signup = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const senhaHash = await bcrypt.hash(senha, salt);
 
-        // Inserimos e pedimos de volta as informações básicas
         const result = await pool.query(
             'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id, nome, email, role',
             [nome, email, senhaHash]
         );
 
-        const newUser = result.rows;
-
         res.status(201).json({
             message: 'Usuário criado com sucesso!',
-            user: newUser
+            user: result.rows
         });
 
     } catch (error) {
@@ -36,12 +33,8 @@ const signup = async (req, res) => {
     }
 };
 
-
 // ==========================================
 // ROTA DE LOGIN
-// ==========================================
-// ==========================================
-// ROTA DE LOGIN (VERSÃO BYPASS TEMPORÁRIA)
 // ==========================================
 const login = async (req, res) => {
     const { email, senha } = req.body;
@@ -49,30 +42,26 @@ const login = async (req, res) => {
     try {
         if (!email || !senha) return res.status(400).json({ error: 'Preencha todos os campos.' });
 
-        // 1. Buscamos o usuário
-        const result = await pool.query('SELECT id, nome, email, role FROM usuarios WHERE email = $1', [email]);
+        const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
 
-        // Se o usuário não existir
         if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'E-mail não encontrado na base de dados.' });
+            return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
         }
 
         const user = result.rows;
 
-        // 2. BYPASS DE SENHA (TEMPORÁRIO)
-        // Ignoramos a verificação do bcrypt porque o banco não está a devolver o Hash.
-        // Se o e-mail existe, deixamos entrar (APENAS PARA TESTE!)
-        
-        console.log("⚠️ ATENÇÃO: Login feito com Bypass de Senha para:", user.email);
+        const isMatch = await bcrypt.compare(senha, user.senha);
 
-        // 3. Geramos o Token
+        if (!isMatch) {
+            return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+        }
+
         const token = jwt.sign(
             { id: user.id, role: user.role }, 
             process.env.JWT_SECRET,
             { expiresIn: '1d' }
         );
 
-        // 4. Devolvemos os dados para a Garagem abrir
         res.json({
             message: 'Login realizado com sucesso!',
             token,
@@ -88,4 +77,10 @@ const login = async (req, res) => {
         console.error("Erro no login:", error);
         res.status(500).json({ error: 'Erro interno no servidor ao fazer login.' });
     }
+};
+
+// ISTO É O QUE FALTAVA E FEZ O SERVIDOR CRASHAR 👇
+module.exports = {
+    signup,
+    login
 };
