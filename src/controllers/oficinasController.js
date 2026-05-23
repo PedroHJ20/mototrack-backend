@@ -8,6 +8,7 @@ const criarOficina = async (req, res) => {
             'INSERT INTO oficinas (nome, endereco, especialidade) VALUES ($1, $2, $3) RETURNING *',
             [nome, endereco, especialidade]
         );
+        // Retornamos rows porque inserimos apenas 1 item
         res.status(201).json({ mensagem: 'Oficina cadastrada!', oficina: novaOficina.rows });
     } catch (erro) {
         console.error(erro);
@@ -19,7 +20,7 @@ const criarOficina = async (req, res) => {
 const listarOficinas = async (req, res) => {
     try {
         const oficinas = await pool.query('SELECT * FROM oficinas ORDER BY criado_em DESC');
-        res.json(oficinas.rows);
+        res.json(oficinas.rows); // Aqui devolvemos a lista inteira (rows)
     } catch (erro) {
         console.error(erro);
         res.status(500).json({ erro: 'Erro ao buscar oficinas.' });
@@ -28,8 +29,8 @@ const listarOficinas = async (req, res) => {
 
 // 3. Atualizar (PUT)
 const atualizarOficina = async (req, res) => {
-    const { id } = req.params; // Pega o ID da URL
-    const { nome, endereco, especialidade } = req.body; // Pega os novos dados
+    const { id } = req.params;
+    const { nome, endereco, especialidade } = req.body;
 
     try {
         const oficinaAtualizada = await pool.query(

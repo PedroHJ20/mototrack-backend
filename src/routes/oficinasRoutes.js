@@ -2,12 +2,28 @@ const express = require('express');
 const router = express.Router();
 const oficinasController = require('../controllers/oficinasController');
 
-// Define as URLs para acessar as oficinas
-router.post('/', oficinasController.criarOficina);
-router.get('/', oficinasController.listarOficinas);
+// Importação dos Middlewares de Segurança
+const { verifyToken } = require('../middlewares/authMiddleware');
+const { isAdmin } = require('../middlewares/roleMiddleware');
 
-// O ":id" avisa o Node que vamos passar um número na URL (ex: /oficinas/1)
-router.put('/:id', oficinasController.atualizarOficina);
-router.delete('/:id', oficinasController.deletarOficina);
+// ==========================================
+// ROTAS DE OFICINAS
+// ==========================================
+
+// GET /oficinas
+// Qualquer utilizador logado pode ver a lista de oficinas parceiras
+router.get('/', verifyToken, oficinasController.listarOficinas);
+
+// POST /oficinas
+// APENAS ADMIN: Adiciona uma nova oficina à rede
+router.post('/', verifyToken, isAdmin, oficinasController.criarOficina);
+
+// DELETE /oficinas/:id
+// APENAS ADMIN: Remove uma oficina da rede
+router.delete('/:id', verifyToken, isAdmin, oficinasController.deletarOficina);
+
+// PUT /oficinas/:id (Opcional, mas recomendado para o futuro)
+// APENAS ADMIN: Atualiza os dados de uma oficina existente
+router.put('/:id', verifyToken, isAdmin, oficinasController.atualizarOficina);
 
 module.exports = router;

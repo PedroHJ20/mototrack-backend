@@ -1,102 +1,98 @@
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const pool = require('../config/db');
+const pool = require('../config/db'); // Verifica se o caminho do seu banco de dados está correto
 
-// --- FUNÇÃO DE CADASTRO ---
+// ==========================================
+// ROTA DE CADASTRO (SIGNUP)
+// ==========================================
 const signup = async (req, res) => {
-  console.log("\n📝 [CADASTRO] Tentando criar usuário:", req.body.email);
-  try {
-    const nome = req.body.nome ? req.body.nome.trim() : "";
-    const email = req.body.email ? req.body.email.trim().toLowerCase() : "";
-    const senha = req.body.senha ? String(req.body.senha).trim() : "";
+    const { nome, email, senha } = req.body;
 
-    const checarUser = await pool.query({
-        text: 'SELECT * FROM usuarios WHERE email = $1',
-        values: [email],
-        query_timeout: 5000
-    });
+    try {
+        // Gera o "sal" e criptografa a senha antes de salvar
+        const salt = await bcrypt.genSalt(10);
+        const senhaHash = await bcrypt.hash(senha, salt);
 
-    let userExiste = Array.isArray(checarUser.rows) ? checarUser.rows.flat(Infinity) : checarUser.rows;
+        // Insere o usuário no banco de dados. 
+        // O NeonDB automaticamente vai colocar role = 'user' por causa do nosso comando SQL.
+        // O "RETURNING *" faz o banco já devolver os dados recém-criados.
+        const result = await pool.query(
+            'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id, nome, email, role',
+            [nome, email, senhaHash]
+        );
 
-    if (userExiste && typeof userExiste === 'object' && userExiste.email) {
-      return res.status(400).json({ erro: 'Este e-mail já está em uso.' });
-    }
+        const newUser = result.rows;
 
-    const salt = await bcrypt.genSalt(10);
-    const senhaHash = await bcrypt.hash(senha, salt);
+        res.status(201).json({
+            message: 'Usuário criado com sucesso!',
+            user: newUser
+        });
 
-    const novoUser = await pool.query({
-      text: 'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id, nome, email',
-      values: [nome, email, senhaHash],
-      query_timeout: 5000
-    });
-
-    let usuarioCriado = Array.isArray(novoUser.rows) ? novoUser.rows.flat(Infinity) : novoUser.rows;
-    
-    console.log("✅ Usuário criado com sucesso:", email);
-    res.status(201).json({ mensagem: 'Usuário cadastrado com sucesso!', usuario: usuarioCriado });
-  } catch (error) {
-    console.error("💥 Erro no cadastro:", error);
-    res.status(500).json({ erro: 'Erro interno ao cadastrar.' });
-  }
-};
-
-
-// --- FUNÇÃO DE LOGIN (OPERAÇÃO ARRASTÃO) ---
-const login = async (req, res) => {
-  console.log("\n🚀 [LOGIN] Tentando acessar com:", req.body.email);
-  try {
-    const emailLimpo = req.body.email ? req.body.email.trim().toLowerCase() : "";
-    const senhaLimpa = req.body.senha ? String(req.body.senha).trim() : "";
-
-    // LIGA A LUZ: Puxa TODO MUNDO do banco (ignorando o filtro WHERE)
-    const resultado = await pool.query('SELECT * FROM usuarios');
-    
-    let listaBruta = resultado.rows;
-
-    // Transforma em array puro e esmaga qualquer pacote maluco do NeonDB
-    let listaLimpa = [];
-    if (Array.isArray(listaBruta)) {
-        listaLimpa = listaBruta.flat(Infinity);
-    } else if (listaBruta && typeof listaBruta === 'object') {
-        listaLimpa = Object.values(listaBruta).flat(Infinity);
-    } else {
-        listaLimpa = [listaBruta];
-    }
-
-    // ARRASTÃO: Busca o usuário no braço usando JavaScript
-    let usuario = null;
-    for (let u of listaLimpa) {
-        if (u && u.email && u.email.trim().toLowerCase() === emailLimpo) {
-            usuario = u;
-            break;
+    } catch (error) {
+        console.error("Erro no cadastro:", error);
+        
+        // Trata o erro específico de e-mail duplicado do PostgreSQL
+        if (error.code === '23505') {
+            return res.status(400).json({ error: 'Este e-mail já está em uso.' });
         }
+        res.status(500).json({ error: 'Erro interno no servidor ao cadastrar.' });
     }
-
-    if (!usuario) {
-      console.log("❌ ERRO: O banco está completamente vazio ou não salvou direito.");
-      console.log("🕵️ O que realmente tem no banco agora:", JSON.stringify(listaLimpa));
-      return res.status(401).json({ erro: 'E-mail ou senha incorretos.' });
-    }
-
-    console.log("✅ Usuário encontrado na marra:", usuario.email);
-
-    // Compara a senha
-    const senhaValida = await bcrypt.compare(senhaLimpa, String(usuario.senha));
-
-    if (!senhaValida) {
-      console.log("❌ ERRO: Senha incorreta.");
-      return res.status(401).json({ erro: 'E-mail ou senha incorretos.' });
-    }
-
-    console.log("✅ SUCESSO TOTAL! Gerando Token...");
-    const token = jwt.sign({ id: usuario.id }, process.env.JWT_SECRET, { expiresIn: '1d' });
-
-    res.status(200).json({ mensagem: 'Login efetuado com sucesso!', token });
-  } catch (error) {
-    console.error("💥 Erro no login:", error.message);
-    res.status(500).json({ erro: 'Erro interno.' });
-  }
 };
 
-module.exports = { signup, login };
+
+// ==========================================
+// ROTA DE LOGIN
+// ==========================================
+const login = async (req, res) => {
+    const { email, senha } = req.body;
+
+    try {
+        // 1. Busca o usuário no banco de dados pelo e-mail
+        const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+
+        // Se a lista de resultados for vazia, o e-mail não existe
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+        }
+
+        const user = result.rows;
+
+        // 2. Compara a senha digitada com a senha criptografada do banco
+        const isMatch = await bcrypt.compare(senha, user.senha);
+
+        if (!isMatch) {
+            return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+        }
+
+        // 3. Senha correta! Gerar o Token JWT com o ID e a ROLE (Nível de Acesso)
+        const token = jwt.sign(
+            { 
+                id: user.id, 
+                role: user.role // <- AQUI ESTÁ A MÁGICA DE SEGURANÇA!
+            }, 
+            process.env.JWT_SECRET,
+            { expiresIn: '1d' } // O token expira em 1 dia
+        );
+
+        // 4. Retorna o token e os dados do usuário para o Front-end salvar
+        res.json({
+            message: 'Login realizado com sucesso!',
+            token,
+            user: {
+                id: user.id,
+                nome: user.nome,
+                email: user.email,
+                role: user.role // Devolvemos a role para o Front-end mostrar o botão de ADM
+            }
+        });
+
+    } catch (error) {
+        console.error("Erro no login:", error);
+        res.status(500).json({ error: 'Erro interno no servidor ao fazer login.' });
+    }
+};
+
+module.exports = {
+    signup,
+    login
+};
