@@ -49,7 +49,7 @@ const login = async (req, res) => {
         }
 
         const user = result.rows;
-
+        console.log("DADOS DO USUÁRIO:", JSON.stringify(user));
         const isMatch = await bcrypt.compare(senha, user.senha);
 
         if (!isMatch) {
