@@ -42,7 +42,7 @@ const login = async (req, res) => {
     try {
         if (!email || !senha) return res.status(400).json({ error: 'Preencha todos os campos.' });
 
-        const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+        const result = await pool.query('SELECT id, nome, email, senha, role FROM usuarios WHERE email = $1', [email]);
 
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
