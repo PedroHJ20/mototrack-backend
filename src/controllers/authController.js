@@ -2,9 +2,6 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 
-// ==========================================
-// ROTA DE CADASTRO
-// ==========================================
 const signup = async (req, res) => {
     const { nome, email, senha } = req.body;
     try {
@@ -26,31 +23,22 @@ const signup = async (req, res) => {
     }
 };
 
-// ==========================================
-// ROTA DE LOGIN (BLINDADA)
-// ==========================================
 const login = async (req, res) => {
     const { email, senha } = req.body;
     try {
         if (!email || !senha) return res.status(400).json({ error: 'Preencha todos os campos.' });
 
-        // Força bruta: pedimos a coluna 'senha' explicitamente
         const result = await pool.query('SELECT id, nome, email, senha, role FROM usuarios WHERE email = $1', [email]);
 
         if (result.rows.length === 0) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
 
-        const user = result.rows;
+        // BLINDAGEM MÁXIMA: Garante que extraímos o objeto, não importa se vem dentro de uma ou duas listas
+        let user = result.rows;
+        if (Array.isArray(user)) user = user;
+        if (Array.isArray(user)) user = user; 
 
-        // O Failsafe: vasculha o objeto procurando o Hash
-        const hashDoBanco = user.senha || user.password || user.senha_hash;
+        const hashDoBanco = user.senha;
 
-        // Se o banco negou a entrega do Hash, não crashamos o app. Paramos aqui graciosamente.
-        if (!hashDoBanco) {
-            console.error("ERRO CRÍTICO: O banco não devolveu o Hash. Objeto recebido:", user);
-            return res.status(500).json({ error: 'Erro de conexão interna com as credenciais.' });
-        }
-
-        // Agora é seguro comparar
         const isMatch = await bcrypt.compare(senha, hashDoBanco);
 
         if (!isMatch) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
