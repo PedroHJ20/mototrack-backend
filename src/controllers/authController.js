@@ -14,7 +14,6 @@ const signup = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const senhaHash = await bcrypt.hash(senha, salt);
 
-        // A coluna no banco chama-se 'senha'
         const result = await pool.query(
             'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id, nome, email, role',
             [nome, email, senhaHash]
@@ -37,9 +36,6 @@ const signup = async (req, res) => {
 // ==========================================
 // ROTA DE LOGIN
 // ==========================================
-// ==========================================
-// ROTA DE LOGIN (VERSÃO DIAGNÓSTICO)
-// ==========================================
 const login = async (req, res) => {
     const { email, senha } = req.body;
 
@@ -52,20 +48,10 @@ const login = async (req, res) => {
             return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
         }
 
-        const user = result.rows;
+        // AQUI ESTÁ A CORREÇÃO DE OURO: Pegar o usuário
+        const user = result.rows; 
         
-        // LOG DIAGNÓSTICO: Isto vai mostrar exatamente o que existe dentro do objeto 'user'
-        console.log("DEBUG: Objeto completo do usuário:", JSON.stringify(user));
-        console.log("DEBUG: Chaves encontradas:", Object.keys(user));
-
-        // Tentar aceder à senha de várias formas possíveis caso o nome da coluna esteja estranho
-        const senhaDoBanco = user.senha || user.Senha || user.SENHA || user.password;
-        
-        if (!senhaDoBanco) {
-            return res.status(500).json({ error: 'Erro: Não encontrei a coluna da senha no banco. Verifique os logs do Render.' });
-        }
-
-        const isMatch = await bcrypt.compare(senha, senhaDoBanco);
+        const isMatch = await bcrypt.compare(senha, user.senha);
 
         if (!isMatch) {
             return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
@@ -90,6 +76,12 @@ const login = async (req, res) => {
 
     } catch (error) {
         console.error("Erro no login:", error);
-        res.status(500).json({ error: 'Erro interno no servidor.' });
+        res.status(500).json({ error: 'Erro interno no servidor ao fazer login.' });
     }
+};
+
+// A EXPORTAÇÃO QUE FAZ O SERVIDOR LIGAR
+module.exports = {
+    signup,
+    login
 };
