@@ -1,70 +1,57 @@
 const pool = require('../config/db');
+const jwt = require('jsonwebtoken');
 
-// 1. Criar (POST)
-const criarOficina = async (req, res) => {
-    const { nome, endereco, especialidade } = req.body;
-    try {
-        const novaOficina = await pool.query(
-            'INSERT INTO oficinas (nome, endereco, especialidade) VALUES ($1, $2, $3) RETURNING *',
-            [nome, endereco, especialidade]
-        );
-        // Retornamos rows porque inserimos apenas 1 item
-        res.status(201).json({ mensagem: 'Oficina cadastrada!', oficina: novaOficina.rows });
-    } catch (erro) {
-        console.error(erro);
-        res.status(500).json({ erro: 'Erro ao cadastrar oficina.' });
+const SECRET = process.env.JWT_SECRET || 'chave_mestra_apresentacao_unicap_2026';
+
+// Failsafe para identificar o Admin
+const obterInfoUsuario = (req) => {
+    if (req.headers.authorization) {
+        try {
+            const token = req.headers.authorization.replace('Bearer ', '').trim();
+            const decoded = jwt.verify(token, SECRET);
+            return decoded;
+        } catch (error) {
+            return null;
+        }
     }
+    return null;
 };
 
-// 2. Listar (GET)
+// Listar todas as oficinas
 const listarOficinas = async (req, res) => {
     try {
-        const oficinas = await pool.query('SELECT * FROM oficinas ORDER BY criado_em DESC');
-        res.json(oficinas.rows); // Aqui devolvemos a lista inteira (rows)
-    } catch (erro) {
-        console.error(erro);
+        const user = obterInfoUsuario(req);
+        
+        // Se não for admin, bloqueia
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ erro: 'Acesso negado. Apenas administradores.' });
+        }
+
+        const { rows } = await pool.query('SELECT * FROM oficinas ORDER BY nome ASC');
+        res.status(200).json({ oficinas: rows });
+    } catch (error) {
+        console.error("Erro ao listar oficinas:", error.message);
         res.status(500).json({ erro: 'Erro ao buscar oficinas.' });
     }
 };
 
-// 3. Atualizar (PUT)
-const atualizarOficina = async (req, res) => {
-    const { id } = req.params;
-    const { nome, endereco, especialidade } = req.body;
-
+// Cadastrar nova oficina
+const cadastrarOficina = async (req, res) => {
     try {
-        const oficinaAtualizada = await pool.query(
-            'UPDATE oficinas SET nome = $1, endereco = $2, especialidade = $3 WHERE id = $4 RETURNING *',
-            [nome, endereco, especialidade, id]
+        const user = obterInfoUsuario(req);
+        if (!user || user.role !== 'admin') return res.status(403).json({ erro: 'Acesso negado.' });
+
+        const { nome, cnpj, endereco, especialidade } = req.body;
+
+        const novaOficina = await pool.query(
+            'INSERT INTO oficinas (nome, cnpj, endereco, especialidade) VALUES ($1, $2, $3, $4) RETURNING *',
+            [nome, cnpj, endereco, especialidade]
         );
 
-        if (oficinaAtualizada.rows.length === 0) {
-            return res.status(404).json({ erro: 'Oficina não encontrada.' });
-        }
-
-        res.json({ mensagem: 'Oficina atualizada com sucesso!', oficina: oficinaAtualizada.rows });
-    } catch (erro) {
-        console.error(erro);
-        res.status(500).json({ erro: 'Erro ao atualizar oficina.' });
+        res.status(201).json({ mensagem: 'Oficina cadastrada!', oficina: novaOficina.rows[0] });
+    } catch (error) {
+        res.status(500).json({ erro: 'Erro ao cadastrar oficina.' });
     }
 };
 
-// 4. Deletar (DELETE)
-const deletarOficina = async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const oficinaDeletada = await pool.query('DELETE FROM oficinas WHERE id = $1 RETURNING *', [id]);
-
-        if (oficinaDeletada.rows.length === 0) {
-            return res.status(404).json({ erro: 'Oficina não encontrada.' });
-        }
-
-        res.json({ mensagem: 'Oficina removida com sucesso!' });
-    } catch (erro) {
-        console.error(erro);
-        res.status(500).json({ erro: 'Erro ao deletar oficina.' });
-    }
-};
-
-module.exports = { criarOficina, listarOficinas, atualizarOficina, deletarOficina };
+module.exports = { listarOficinas, cadastrarOficina };
