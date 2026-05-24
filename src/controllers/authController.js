@@ -37,23 +37,35 @@ const signup = async (req, res) => {
 // ==========================================
 // ROTA DE LOGIN
 // ==========================================
+// ==========================================
+// ROTA DE LOGIN (VERSÃO DIAGNÓSTICO)
+// ==========================================
 const login = async (req, res) => {
     const { email, senha } = req.body;
 
     try {
         if (!email || !senha) return res.status(400).json({ error: 'Preencha todos os campos.' });
 
-        // Selecionamos a coluna 'senha' do banco
-        const result = await pool.query('SELECT id, nome, email, senha, role FROM usuarios WHERE email = $1', [email]);
+        const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
 
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
         }
 
-        const user = result.rows; 
+        const user = result.rows;
         
-        // Comparar com a coluna 'senha' que o banco devolveu
-        const isMatch = await bcrypt.compare(senha, user.senha);
+        // LOG DIAGNÓSTICO: Isto vai mostrar exatamente o que existe dentro do objeto 'user'
+        console.log("DEBUG: Objeto completo do usuário:", JSON.stringify(user));
+        console.log("DEBUG: Chaves encontradas:", Object.keys(user));
+
+        // Tentar aceder à senha de várias formas possíveis caso o nome da coluna esteja estranho
+        const senhaDoBanco = user.senha || user.Senha || user.SENHA || user.password;
+        
+        if (!senhaDoBanco) {
+            return res.status(500).json({ error: 'Erro: Não encontrei a coluna da senha no banco. Verifique os logs do Render.' });
+        }
+
+        const isMatch = await bcrypt.compare(senha, senhaDoBanco);
 
         if (!isMatch) {
             return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
@@ -78,11 +90,6 @@ const login = async (req, res) => {
 
     } catch (error) {
         console.error("Erro no login:", error);
-        res.status(500).json({ error: 'Erro interno no servidor ao fazer login.' });
+        res.status(500).json({ error: 'Erro interno no servidor.' });
     }
-};
-
-module.exports = {
-    signup,
-    login
 };
