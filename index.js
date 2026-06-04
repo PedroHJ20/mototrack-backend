@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config(); 
+require('dotenv').config();
 
 // Importa o banco de dados
 const pool = require('./src/config/db');
@@ -13,14 +13,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --- MIDDLEWARES GLOBAIS ---
-app.use(cors()); 
-app.use(express.json()); 
+app.use(cors());
+app.use(express.json());
 
 // --- VINCULAÇÃO DAS ROTAS ---
-app.use('/auth', authRoutes);             
-app.use('/motocicletas', motocicletasRoutes); 
+app.use('/auth', authRoutes);
+app.use('/motocicletas', motocicletasRoutes);
 // Abaixo da rota de motocicletas, adicione esta:
 app.use('/manutencoes', require('./src/routes/manutencaoRoutes'));
+
+// Rota de oficinas adicionada para o Front-end
+app.use('/oficinas', require('./src/routes/oficinasRoutes'));
 
 app.get('/', (req, res) => {
     res.send('🏍️ API MotoTrack online e rodando perfeitamente!');
