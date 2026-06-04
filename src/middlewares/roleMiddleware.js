@@ -1,6 +1,6 @@
 const isAdmin = (req, res, next) => {
-    // O req.user é preenchido pelo seu middleware de verificação de token JWT existente
-    if (req.user && req.user.role === 'admin') {
+    // Agora ele verifica req.role ou req.usuarioRole, que foi o que definimos no authMiddleware
+    if (req.role === 'admin' || req.usuarioRole === 'admin') {
         next(); // Usuário é Admin, permite prosseguir para a rota
     } else {
         return res.status(403).json({ message: "Acesso negado. Esta área é restrita para Administradores." });
