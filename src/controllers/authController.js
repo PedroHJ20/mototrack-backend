@@ -16,7 +16,8 @@ const signup = async (req, res) => {
             'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id, nome, email, role',
             [nome, email, senhaHash]
         );
-        res.status(201).json({ message: 'Sucesso!', user: result.rows });
+        // Retorna apenas o objeto do usuário recém-criado, e não o array inteiro
+        res.status(201).json({ message: 'Sucesso!', user: result.rows[0] });
     } catch (error) {
         res.status(500).json({ error: 'Erro ao cadastrar.' });
     }
@@ -30,13 +31,17 @@ const login = async (req, res) => {
         const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
         if (result.rowCount === 0) return res.status(401).json({ error: 'E-mail não encontrado.' });
 
-        // Extração garantida à força
-        let user = result.rows;
+        // A CORREÇÃO: Pegamos o primeiro (e único) usuário encontrado na lista!
+        let user = result.rows[0];
 
-        // Forçamos a criação do Token com dados limpos e seguros
-        const userId = user.id || 1; 
+        // Validamos a senha com o hash do banco
+        const senhaValida = await bcrypt.compare(senha, user.senha);
+        if (!senhaValida) return res.status(401).json({ error: 'Senha incorreta.' });
+
+        // Extraímos os dados reais sem a "boia" que forçava o ID 1
+        const userId = user.id; 
         const userRole = user.role || 'user';
-        const userName = user.nome || 'Piloto';
+        const userName = user.nome;
 
         const token = jwt.sign({ id: userId, role: userRole }, SECRET, { expiresIn: '1d' });
 
