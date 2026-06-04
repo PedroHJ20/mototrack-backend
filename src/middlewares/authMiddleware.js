@@ -20,8 +20,16 @@ const verificarToken = (req, res, next) => {
     try {
         const decodificado = jwt.verify(tokenLimpo, process.env.JWT_SECRET);
         
+        // Passamos o ID do usuário
         req.usuarioId = decodificado.id; 
-        next(); // Chave perfeita! Acesso liberado para a garagem!
+        
+        // 🔥 A CORREÇÃO SALVADORA:
+        // Passamos a permissão (role) adiante para que o middleware de Admin possa ler e liberar o acesso!
+        // Deixei em duas variáveis comuns (role e usuarioRole) para garantir que o seu sistema encontre de qualquer jeito.
+        req.role = decodificado.role;
+        req.usuarioRole = decodificado.role;
+
+        next(); // Chave perfeita! Acesso liberado!
     } catch (erro) {
         console.error("🕵️ ❌ ERRO FATAL:", erro.message);
         return res.status(401).json({ erro: 'Token inválido ou expirado.' });
